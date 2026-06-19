@@ -1,4 +1,4 @@
-"""Central configuration. Reads from environment (.env). No secrets live in code."""
+"""Central configuration."""
 from __future__ import annotations
 
 import os
@@ -22,6 +22,11 @@ LLM_TIMEOUT_S: int = int(os.getenv("LLM_TIMEOUT_S", "15"))
 
 # --- Abuse / reliability controls ---
 RATE_LIMIT: str = os.getenv("RATE_LIMIT", "30/minute")
+
+# Optional shared API key. When set, all protected endpoints require a matching
+# `X-API-Key` header. This is a coarse gate on top of the (mocked) role headers; real
+# identity would come from OAuth2/OIDC + JWT. Leave unset to keep local dev frictionless.
+API_KEY: str = os.getenv("API_KEY", "").strip()
 
 # When no token is configured we run fully offline using safe templates.
 LLM_ENABLED: bool = bool(LLM_API_TOKEN)

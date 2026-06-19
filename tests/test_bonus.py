@@ -66,11 +66,11 @@ def test_supervisor_can_escalate(client):
 
 
 def test_execute_respects_isolation(client):
-    # agent_a cannot execute on agent_b's borrower.
+    # agent_a cannot execute on agent_b's borrower -> 404 (enumeration-safe).
     r = client.post(
         "/borrowers/B006/execute", headers=AGENT_A, json={"action": "SMS reminder"}
     )
-    assert r.status_code == 403
+    assert r.status_code == 404
 
 
 def test_execute_rejects_unknown_action(client):

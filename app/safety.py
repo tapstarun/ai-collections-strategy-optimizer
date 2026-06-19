@@ -53,15 +53,29 @@ def redact_pii(text: str | None) -> str:
     return out
 
 
+def _normalize_whitespace(text: str) -> str:
+    """Collapse any run of whitespace (spaces, tabs, newlines) to a single space.
+
+    Defeats simple evasion such as "ignore   all   previous   instructions" or line
+    breaks inserted between trigger words, so the injection patterns still match.
+    """
+    return re.sub(r"\s+", " ", text)
+
+
 def sanitize_untrusted(text: str | None) -> str:
     """Strip injection trigger phrases from borrower-supplied free text, then redact PII.
+
+    Whitespace is normalised first so spaced-out / newline-broken evasions are caught.
+    This is a best-effort scrubber, not a complete defence — the LLM only emits message
+    text and the output is re-scanned (`check_output`), so a bypass here cannot change a
+    financial decision and unsafe output still falls back to a safe template.
 
     The result is only ever embedded as clearly-delimited *data* in the prompt, never as
     instructions.
     """
     if not text:
         return ""
-    cleaned = text
+    cleaned = _normalize_whitespace(text)
     for pattern in _INJECTION_PATTERNS:
         cleaned = pattern.sub("[removed]", cleaned)
     return redact_pii(cleaned).strip()

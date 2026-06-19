@@ -137,25 +137,43 @@ recoverable value).
 
 ## Security & privacy
 
-**Implemented in the prototype (auth simulated, authorization real):**
+**Implemented in the prototype (authorization is real; identity is mocked):**
 - **RBAC**, default-deny, on every protected endpoint. Missing/invalid creds → 401.
-- **Per-agent data isolation** — an agent cannot read/act on another agent's borrower (403);
-  error messages don't reveal whether the borrower exists elsewhere.
+- **Optional API-key gate** — set `API_KEY` and all protected endpoints require a matching
+  `X-API-Key` header (constant-time compare); `/health` stays open.
+- **Per-agent data isolation** — an agent cannot read/act on another agent's borrower. To an
+  agent, a not-in-portfolio borrower returns the **same 404** as a non-existent one, so the
+  API is not an enumeration oracle. (Supervisors see all.)
 - **Escalation is supervisor-only**; audit log is supervisor-only.
-- **Rate limiting** (`slowapi`, default 30/min per caller) to resist being overwhelmed.
-- **Strict input validation** (Pydantic `extra="forbid"`) rejects unexpected/oversized fields.
-- **PII redaction** before any LLM call; **no PII in logs or client error messages**.
-- **Prompt-injection defence**: borrower free text is sanitised and passed as clearly-fenced
-  *untrusted data*; the LLM only emits message text and cannot alter a decision.
-- **Output safety filter** blocks threatening/harassing language and leaked PII → safe template.
+- **Rate limiting** keyed on **client IP** (not the spoofable `X-Agent-Id`) so an attacker
+  cannot rotate a header to bypass it.
+- **Strict input validation** (Pydantic `extra="forbid"`) rejects unexpected/oversized fields;
+  a model validator rejects impossible data (e.g. `promises_kept > promises_made`).
+- **Data minimisation to the LLM** — only a sanitised **first name** is sent (never the
+  surname); PII is redacted before any LLM call; **no PII in logs or client error messages**.
+- **Prompt-injection defence**: borrower free text has whitespace normalised (defeats
+  `ignore   all   previous   instructions`-style evasion), trigger phrases stripped, and is
+  passed as clearly-fenced *untrusted data*. The LLM only emits message text and cannot alter
+  a decision; its output is re-scanned and unsafe replies fall back to a safe template.
 - **Audit log** records actor, role, borrower, event, timestamp.
 
+### Threat model & known limitations (honest)
+- **Trusted-header identity is the main caveat.** `X-Agent-Id` / `X-Role` are client-supplied
+  and therefore **spoofable** — in this prototype a caller can claim `supervisor`. This is an
+  accepted property of a *mock*, not a secure auth system. The optional `API_KEY` narrows the
+  surface but is not per-user identity.
+- The injection scrubber and output filter are pattern-based — useful guardrails, not a
+  complete content-moderation/jailbreak defence. The real protection is architectural: the LLM
+  can never change a financial decision.
+
 **How this maps to production (documented, not built):**
-- Identity via OAuth2/OIDC + signed JWT instead of trusted headers.
+- Identity via OAuth2/OIDC + **signed JWT**; role claims come from the verified token, not
+  headers. The authorization functions stay essentially unchanged.
 - Data isolation via database **row-level security** keyed on the agent's portfolio.
 - Sensitive fields **encrypted at rest** (KMS); decrypted only for authorized roles.
 - Audit log as an **append-only** store/sink; PII tokenised.
-- Rate limiting + WAF at the gateway; secrets from a managed secret store.
+- Rate limiting + WAF at the gateway (on authenticated identity); secrets from a managed
+  secret store.
 
 ---
 
@@ -174,26 +192,9 @@ recoverable value).
 - The output safety filter is keyword/pattern based — a useful guardrail, not a complete
   content-moderation system.
 
-## Project layout
-```
-app/
-  main.py          FastAPI app + endpoints (auth, rate limit, audit wiring)
-  models.py        Pydantic schemas (strict validation)
-  segmentation.py  deterministic segment rules + reasons
-  strategy.py      action mapping, channel/time, recovery score, priority
-  engine.py        composes segmentation + strategy + message
-  message_gen.py   LLM wrapper client + safe template fallback
-  safety.py        PII redaction, injection sanitisation, output filter
-  auth.py          mocked RBAC + data isolation
-  audit.py         in-memory audit log
-  config.py        env-based config (no secrets in code)
-  store.py         loads & validates synthetic data
-  data/borrowers.json
-tests/             45 tests (segmentation, strategy, safety, API/RBAC, bonus)
-```
 
 ## Testing
 `uv run pytest` — covers every segment rule and the hardship tie-breaker, strategy/recovery
 logic, PII redaction + injection sanitisation + output safety + LLM fallback paths, and the
 API's auth/isolation/rate-limit/error behaviour.
-```
+

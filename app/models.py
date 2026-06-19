@@ -6,11 +6,10 @@ validated strictly so malformed or hostile payloads are rejected at the edge
 """
 from __future__ import annotations
 
-from datetime import date
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # --- Controlled vocabularies -------------------------------------------------
@@ -76,6 +75,14 @@ class Borrower(BaseModel):
     # Optional free-text note — UNTRUSTED. Treated as data, never instructions,
     # and redacted/sanitised before reaching the LLM.
     notes: Optional[str] = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_promise_integrity(self) -> "Borrower":
+        # Data integrity: you cannot keep more promises than you made. Without this
+        # the recovery-score keep-rate could exceed 1.0 and skew the estimate.
+        if self.promises_kept > self.promises_made:
+            raise ValueError("promises_kept cannot exceed promises_made")
+        return self
 
 
 # --- Strategy output ---------------------------------------------------------

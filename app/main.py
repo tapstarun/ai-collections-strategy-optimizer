@@ -24,6 +24,7 @@ from .auth import (
     authorize_borrower_access,
     can_execute_action,
     get_principal,
+    require_api_key,
     require_supervisor,
 )
 from .config import RATE_LIMIT
@@ -42,9 +43,13 @@ from .strategy import priority_score, recommend_action, recovery_probability
 
 
 def _rate_key(request: Request) -> str:
-    """Rate-limit per caller identity when present, else per client IP."""
-    agent = request.headers.get("X-Agent-Id")
-    return agent or get_remote_address(request)
+    """Rate-limit on the client IP, which the caller cannot spoof via a header.
+
+    We deliberately do NOT key on `X-Agent-Id`: it is client-supplied, so an attacker
+    could rotate it to bypass the limit. IP is the non-spoofable anchor at this layer;
+    in production the gateway/WAF would also rate-limit on authenticated identity.
+    """
+    return get_remote_address(request)
 
 
 limiter = Limiter(key_func=_rate_key, default_limits=[RATE_LIMIT])

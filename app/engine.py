@@ -1,6 +1,6 @@
 """Orchestration: combine segmentation + strategy into a single Strategy result.
 
-Keeps the API layer thin. Message generation is attached separately (Step 6) so this
+Keeps the API layer thin. Message generation is attached separately so this
 stays a pure, deterministic, easily-tested composition of the decision engine.
 """
 from __future__ import annotations

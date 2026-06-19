@@ -34,9 +34,18 @@ def test_agent_can_access_own_borrower(client):
 
 
 def test_agent_blocked_from_other_portfolio(client):
-    # B006 belongs to agent_b; agent_a must be denied.
+    # B006 belongs to agent_b; agent_a is denied. We return 404 (not 403) so the agent
+    # cannot distinguish "exists but not mine" from "does not exist" (enumeration oracle).
     r = client.post("/borrowers/B006/strategy", headers=AGENT_A)
-    assert r.status_code == 403
+    assert r.status_code == 404
+
+
+def test_agent_cannot_distinguish_unknown_from_not_mine(client):
+    # Both the not-mine borrower and a truly unknown id return identical 404s.
+    not_mine = client.post("/borrowers/B006/strategy", headers=AGENT_A)
+    unknown = client.post("/borrowers/NOPE/strategy", headers=AGENT_A)
+    assert not_mine.status_code == unknown.status_code == 404
+    assert not_mine.json() == unknown.json()
 
 
 def test_supervisor_sees_all(client):
@@ -50,7 +59,7 @@ def test_unknown_borrower_404(client):
 
 
 def test_explain_respects_isolation(client):
-    assert client.get("/borrowers/B006/explain", headers=AGENT_A).status_code == 403
+    assert client.get("/borrowers/B006/explain", headers=AGENT_A).status_code == 404
     assert client.get("/borrowers/B006/explain", headers=AGENT_B).status_code == 200
 
 

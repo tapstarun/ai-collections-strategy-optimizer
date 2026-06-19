@@ -64,14 +64,31 @@ _GENERIC_TEMPLATE = (
 )
 
 
-def _first_name(name: str) -> str:
-    return name.split()[0] if name.strip() else "there"
+# Tokens that look like a name but are actually redaction placeholders or injection
+# trigger words — never use these as a greeting.
+_NAME_BLOCKLIST = {"email", "phone", "id", "removed", "ignore", "system", "disregard"}
+
+
+def _safe_first_name(name: str) -> str:
+    """Return ONLY a sanitised first name for personalisation (data minimisation).
+
+    The surname is never sent to the LLM. The first token is PII-redacted then accepted
+    only if it is a plausible name (letters/hyphen/apostrophe, not a placeholder or
+    injection trigger word); otherwise we fall back to a neutral greeting.
+    """
+    first = name.split()[0] if name.strip() else ""
+    first = safety.sanitize_untrusted(first)
+    # Keep letters/hyphen/apostrophe only; drop digits, symbols, redaction brackets.
+    first = "".join(ch for ch in first if ch.isalpha() or ch in "-'")[:40]
+    if not first or first.lower() in _NAME_BLOCKLIST:
+        return "there"
+    return first
 
 
 def _render_template(borrower: Borrower, segment: Segment) -> str:
     tmpl = _TEMPLATES.get(segment, _GENERIC_TEMPLATE)
     amount = f"{borrower.overdue_amount:,.0f}"
-    return tmpl.format(first=_first_name(borrower.name), amount=amount)
+    return tmpl.format(first=_safe_first_name(borrower.name), amount=amount)
 
 
 def _build_prompt(borrower: Borrower, segment: Segment, action: NextBestAction) -> str:
@@ -88,7 +105,7 @@ def _build_prompt(borrower: Borrower, segment: Segment, action: NextBestAction) 
         "Write a SHORT customer message (2-3 sentences). Rules: be supportive and "
         "professional; NEVER threaten, shame, or mention legal/criminal action; offer "
         "help; do not invent facts beyond those given.\n\n"
-        f"Borrower first name: {_first_name(borrower.name)}\n"
+        f"Borrower first name: {_safe_first_name(borrower.name)}\n"
         f"Situation: {segment.value}\n"
         f"Recommended action: {action.value}\n"
         f"Amount outstanding: {borrower.overdue_amount:,.0f}\n"
