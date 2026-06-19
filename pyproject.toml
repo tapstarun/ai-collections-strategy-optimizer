@@ -1,0 +1,27 @@
+[project]
+name = "collections-strategy-optimizer"
+version = "0.1.0"
+description = "AI-based collections strategy optimizer for delinquent borrowers (fintech case study)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.30.6",
+    "pydantic==2.9.2",
+    "requests==2.32.3",
+    "python-dotenv==1.0.1",
+    "slowapi==0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.3",
+    "httpx==0.27.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+# This is an application, not an installable library — don't build/install the
+# project itself, just manage its dependencies into the environment.
+package = false
